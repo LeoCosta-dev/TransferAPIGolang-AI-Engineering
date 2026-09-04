@@ -562,8 +562,8 @@ HTTP/1.1 409 Conflict
 The original operation remains unchanged.
 
 The same conflict applies when the key is reused for a different operation type
-on the same account. The same key may be used independently for another
-account.
+or a different account on the same service. The same key cannot be reused
+across accounts.
 
 If the first request fails because of a business rule before producing a
 monetary effect, no idempotency record is retained. A later valid request may

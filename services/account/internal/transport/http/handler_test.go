@@ -2,16 +2,20 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/lcosta/TransferAPIGolang/services/account/internal/application"
 	"github.com/lcosta/TransferAPIGolang/services/account/internal/domain"
+	"github.com/lcosta/TransferAPIGolang/services/account/internal/persistence/sqlite"
 )
 
 const testAccountID = "550e8400-e29b-41d4-a716-446655440000"
@@ -25,6 +29,7 @@ type accountServiceFake struct {
 	creditCalls  int
 	debitCalls   int
 	lastAmount   int64
+	lastKey      string
 	lastStatus   domain.Status
 	lastName     string
 }
@@ -72,27 +77,29 @@ func (fake *accountServiceFake) GetBalance(_ context.Context, _ string) (int64, 
 	return fake.account.Balance, nil
 }
 
-func (fake *accountServiceFake) Credit(_ context.Context, _ string, amount int64) (domain.Account, error) {
+func (fake *accountServiceFake) Credit(_ context.Context, id string, amount int64, key string) (application.MoneyOperationResult, error) {
 	fake.creditCalls++
 	fake.lastAmount = amount
+	fake.lastKey = key
 	if fake.operationErr != nil {
-		return domain.Account{}, fake.operationErr
+		return application.MoneyOperationResult{}, fake.operationErr
 	}
 	fake.account.Balance += amount
-	return fake.account, nil
+	return application.MoneyOperationResult{AccountID: id, Balance: fake.account.Balance}, nil
 }
 
-func (fake *accountServiceFake) Debit(_ context.Context, _ string, amount int64) (domain.Account, error) {
+func (fake *accountServiceFake) Debit(_ context.Context, id string, amount int64, key string) (application.MoneyOperationResult, error) {
 	fake.debitCalls++
 	fake.lastAmount = amount
+	fake.lastKey = key
 	if fake.operationErr != nil {
-		return domain.Account{}, fake.operationErr
+		return application.MoneyOperationResult{}, fake.operationErr
 	}
 	fake.account.Balance -= amount
-	return fake.account, nil
+	return application.MoneyOperationResult{AccountID: id, Balance: fake.account.Balance}, nil
 }
 
-func newHTTPTestServer(service *accountServiceFake) *echo.Echo {
+func newHTTPTestServer(service application.AccountService) *echo.Echo {
 	e := echo.New()
 	RegisterRoutes(e, NewHandler(service))
 	return e
@@ -223,7 +230,7 @@ func TestIdempotencyKeyIsValidatedButNotStored(t *testing.T) {
 
 	first := request(t, server, http.MethodPost, "/api/v1/accounts/"+testAccountID+"/credits", `{"amount":1}`, map[string]string{
 		"Content-Type":    "application/json",
-		"Idempotency-Key": "same-key",
+		"Idempotency-Key": "  same-key  ",
 	})
 	second := request(t, server, http.MethodPost, "/api/v1/accounts/"+testAccountID+"/credits", `{"amount":1}`, map[string]string{
 		"Content-Type":    "application/json",
@@ -231,6 +238,9 @@ func TestIdempotencyKeyIsValidatedButNotStored(t *testing.T) {
 	})
 	if first.Code != http.StatusOK || second.Code != http.StatusOK || service.creditCalls != 2 {
 		t.Fatalf("idempotência foi implementada nesta etapa: first=%d second=%d calls=%d", first.Code, second.Code, service.creditCalls)
+	}
+	if service.lastKey != "same-key" {
+		t.Fatalf("chave não normalizada: %q", service.lastKey)
 	}
 }
 
@@ -258,5 +268,109 @@ func TestApplicationErrorsAreMapped(t *testing.T) {
 				t.Fatalf("resposta sem campo error: %s", response.Body.String())
 			}
 		})
+	}
+}
+
+func TestRealHTTPIdempotencyReplayAndConflict(t *testing.T) {
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:http-%s?mode=memory&cache=shared", t.Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(8)
+	repository, err := sqlite.New(context.Background(), db)
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	account := newHTTPTestAccount()
+	if err := repository.Create(context.Background(), account); err != nil {
+		t.Fatal(err)
+	}
+	server := newHTTPTestServer(application.NewService(repository))
+	headers := map[string]string{
+		"Content-Type":    "application/json",
+		"Idempotency-Key": "credit-http",
+	}
+	first := request(t, server, http.MethodPost, "/api/v1/accounts/"+testAccountID+"/credits", `{"amount":25}`, headers)
+	replay := request(t, server, http.MethodPost, "/api/v1/accounts/"+testAccountID+"/credits", `{"amount":25}`, headers)
+	if first.Code != http.StatusOK || replay.Code != http.StatusOK || first.Body.String() != replay.Body.String() {
+		t.Fatalf("response de replay diferente: first=%d %q replay=%d %q", first.Code, first.Body.String(), replay.Code, replay.Body.String())
+	}
+	conflict := request(t, server, http.MethodPost, "/api/v1/accounts/"+testAccountID+"/credits", `{"amount":30}`, headers)
+	if conflict.Code != http.StatusConflict {
+		t.Fatalf("status de conflito = %d, want %d", conflict.Code, http.StatusConflict)
+	}
+
+	accountResponse := request(t, server, http.MethodGet, "/api/v1/accounts/"+testAccountID, "", nil)
+	if accountResponse.Code != http.StatusOK || !strings.Contains(accountResponse.Body.String(), `"balance":125`) {
+		t.Fatalf("saldo após replay/conflito: status=%d body=%s", accountResponse.Code, accountResponse.Body.String())
+	}
+}
+
+func TestRealHTTPConcurrentSameKeyHasOneEffect(t *testing.T) {
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:http-concurrent-%s?mode=memory&cache=shared", t.Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(8)
+	repository, err := sqlite.New(context.Background(), db)
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	defer db.Close()
+	account := newHTTPTestAccount()
+	if err := repository.Create(context.Background(), account); err != nil {
+		t.Fatal(err)
+	}
+	e := newHTTPTestServer(application.NewService(repository))
+	httpServer := httptest.NewServer(e)
+	defer httpServer.Close()
+
+	const requests = 10
+	responses := make(chan *http.Response, requests)
+	errorsChannel := make(chan error, requests)
+	var waitGroup sync.WaitGroup
+	for index := 0; index < requests; index++ {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			request, err := http.NewRequest(http.MethodPost, httpServer.URL+"/api/v1/accounts/"+testAccountID+"/credits", strings.NewReader(`{"amount":1}`))
+			if err != nil {
+				errorsChannel <- err
+				return
+			}
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Idempotency-Key", "concurrent-http")
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				errorsChannel <- err
+				return
+			}
+			responses <- response
+		}()
+	}
+	waitGroup.Wait()
+	close(responses)
+	close(errorsChannel)
+	for err := range errorsChannel {
+		t.Fatal(err)
+	}
+	for response := range responses {
+		if response.StatusCode != http.StatusOK {
+			response.Body.Close()
+			t.Fatalf("status concorrente = %d, want %d", response.StatusCode, http.StatusOK)
+		}
+		response.Body.Close()
+	}
+
+	found, err := repository.FindByID(context.Background(), testAccountID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Balance != 101 {
+		t.Fatalf("saldo concorrente HTTP = %d, want 101", found.Balance)
 	}
 }

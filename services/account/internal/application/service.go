@@ -2,7 +2,10 @@ package application
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lcosta/TransferAPIGolang/services/account/internal/domain"
 )
@@ -20,13 +23,15 @@ type AccountService interface {
 	UpdateName(ctx context.Context, id, name string) (domain.Account, error)
 	ChangeStatus(ctx context.Context, id string, status domain.Status) (domain.Account, error)
 	GetBalance(ctx context.Context, id string) (int64, error)
-	Credit(ctx context.Context, id string, amount int64) (domain.Account, error)
-	Debit(ctx context.Context, id string, amount int64) (domain.Account, error)
+	Credit(ctx context.Context, id string, amount int64, idempotencyKey string) (MoneyOperationResult, error)
+	Debit(ctx context.Context, id string, amount int64, idempotencyKey string) (MoneyOperationResult, error)
 }
 
 type AccountTransaction interface {
 	FindByID(ctx context.Context, id string) (domain.Account, error)
 	Update(ctx context.Context, account domain.Account) error
+	FindIdempotencyOperation(ctx context.Context, key string) (IdempotencyOperation, error)
+	CreateIdempotencyOperation(ctx context.Context, operation IdempotencyOperation) error
 }
 
 type Service struct {
@@ -93,9 +98,20 @@ func (service *Service) GetBalance(ctx context.Context, id string) (int64, error
 	return account.Balance, nil
 }
 
-func (service *Service) Credit(ctx context.Context, id string, amount int64) (domain.Account, error) {
-	var result domain.Account
-	err := service.repository.WithTransaction(ctx, func(transactionContext context.Context, transaction AccountTransaction) error {
+func (service *Service) Credit(ctx context.Context, id string, amount int64, idempotencyKey string) (MoneyOperationResult, error) {
+	var result MoneyOperationResult
+	idempotencyKey, err := normalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return MoneyOperationResult{}, err
+	}
+	err = service.repository.WithTransaction(ctx, func(transactionContext context.Context, transaction AccountTransaction) error {
+		if operation, err := service.findIdempotencyOperation(transactionContext, transaction, idempotencyKey, OperationCredit, id, amount); err == nil {
+			result = replayResult(operation)
+			return nil
+		} else if !errors.Is(err, ErrIdempotencyNotFound) {
+			return err
+		}
+
 		account, err := service.findAccountInTransaction(transactionContext, transaction, id)
 		if err != nil {
 			return err
@@ -106,18 +122,38 @@ func (service *Service) Credit(ctx context.Context, id string, amount int64) (do
 		if err := transaction.Update(transactionContext, account); err != nil {
 			return err
 		}
-		result = account
+		if err := transaction.CreateIdempotencyOperation(transactionContext, IdempotencyOperation{
+			Key:              idempotencyKey,
+			AccountID:        id,
+			OperationType:    OperationCredit,
+			Amount:           amount,
+			ResultingBalance: account.Balance,
+		}); err != nil {
+			return err
+		}
+		result = MoneyOperationResult{AccountID: account.ID, Balance: account.Balance}
 		return nil
 	})
 	if err != nil {
-		return domain.Account{}, err
+		return MoneyOperationResult{}, err
 	}
 	return result, nil
 }
 
-func (service *Service) Debit(ctx context.Context, id string, amount int64) (domain.Account, error) {
-	var result domain.Account
-	err := service.repository.WithTransaction(ctx, func(transactionContext context.Context, transaction AccountTransaction) error {
+func (service *Service) Debit(ctx context.Context, id string, amount int64, idempotencyKey string) (MoneyOperationResult, error) {
+	var result MoneyOperationResult
+	idempotencyKey, err := normalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return MoneyOperationResult{}, err
+	}
+	err = service.repository.WithTransaction(ctx, func(transactionContext context.Context, transaction AccountTransaction) error {
+		if operation, err := service.findIdempotencyOperation(transactionContext, transaction, idempotencyKey, OperationDebit, id, amount); err == nil {
+			result = replayResult(operation)
+			return nil
+		} else if !errors.Is(err, ErrIdempotencyNotFound) {
+			return err
+		}
+
 		account, err := service.findAccountInTransaction(transactionContext, transaction, id)
 		if err != nil {
 			return err
@@ -128,13 +164,45 @@ func (service *Service) Debit(ctx context.Context, id string, amount int64) (dom
 		if err := transaction.Update(transactionContext, account); err != nil {
 			return err
 		}
-		result = account
+		if err := transaction.CreateIdempotencyOperation(transactionContext, IdempotencyOperation{
+			Key:              idempotencyKey,
+			AccountID:        id,
+			OperationType:    OperationDebit,
+			Amount:           amount,
+			ResultingBalance: account.Balance,
+		}); err != nil {
+			return err
+		}
+		result = MoneyOperationResult{AccountID: account.ID, Balance: account.Balance}
 		return nil
 	})
 	if err != nil {
-		return domain.Account{}, err
+		return MoneyOperationResult{}, err
 	}
 	return result, nil
+}
+
+func (service *Service) findIdempotencyOperation(ctx context.Context, transaction AccountTransaction, key string, operationType OperationType, accountID string, amount int64) (IdempotencyOperation, error) {
+	operation, err := transaction.FindIdempotencyOperation(ctx, key)
+	if err != nil {
+		return IdempotencyOperation{}, err
+	}
+	if operation.AccountID != accountID || operation.OperationType != operationType || operation.Amount != amount {
+		return IdempotencyOperation{}, ErrIdempotencyConflict
+	}
+	return operation, nil
+}
+
+func replayResult(operation IdempotencyOperation) MoneyOperationResult {
+	return MoneyOperationResult{AccountID: operation.AccountID, Balance: operation.ResultingBalance}
+}
+
+func normalizeIdempotencyKey(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || utf8.RuneCountInString(value) > maxIdempotencyKeyLength {
+		return "", ErrInvalidIdempotencyKey
+	}
+	return value, nil
 }
 
 func (service *Service) findAccount(ctx context.Context, id string) (domain.Account, error) {

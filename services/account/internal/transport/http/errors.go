@@ -41,6 +41,8 @@ func statusForError(err error) (int, string) {
 		return http.StatusNotFound, "conta não encontrada"
 	case errors.Is(err, application.ErrDuplicateDocument):
 		return http.StatusConflict, "documento já associado a uma conta"
+	case errors.Is(err, application.ErrIdempotencyConflict):
+		return http.StatusConflict, "Idempotency-Key em conflito com a operação existente"
 	case errors.Is(err, domain.ErrInvalidStatusChange):
 		return http.StatusConflict, "transição de status não permitida"
 	case errors.Is(err, domain.ErrAccountBlocked):

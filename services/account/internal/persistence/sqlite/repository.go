@@ -24,7 +24,7 @@ func (repository *Repository) Close() error {
 }
 
 func Open(ctx context.Context, dataSourceName string) (*Repository, error) {
-	db, err := sql.Open("sqlite", dataSourceName)
+	db, err := sql.Open("sqlite", sqliteDSN(dataSourceName))
 	if err != nil {
 		return nil, fmt.Errorf("abrir banco SQLite: %w", err)
 	}
@@ -37,13 +37,20 @@ func Open(ctx context.Context, dataSourceName string) (*Repository, error) {
 	return repository, nil
 }
 
+func sqliteDSN(dataSourceName string) string {
+	separator := "?"
+	if strings.Contains(dataSourceName, "?") {
+		separator = "&"
+	}
+	return dataSourceName + separator + "_pragma=foreign_keys(1)"
+}
+
 func New(ctx context.Context, db *sql.DB) (*Repository, error) {
 	if db == nil {
 		return nil, fmt.Errorf("inicializar repository: %w", ErrStorage)
 	}
 
 	for _, statement := range []string{
-		"PRAGMA foreign_keys = ON",
 		"PRAGMA busy_timeout = 5000",
 		"PRAGMA journal_mode = WAL",
 	} {
@@ -121,6 +128,49 @@ func (transaction *accountTransaction) FindByID(ctx context.Context, id string) 
 
 func (transaction *accountTransaction) Update(ctx context.Context, account domain.Account) error {
 	return update(ctx, transaction.connection, account)
+}
+
+func (transaction *accountTransaction) FindIdempotencyOperation(ctx context.Context, key string) (application.IdempotencyOperation, error) {
+	var operation application.IdempotencyOperation
+	var operationType string
+	err := transaction.connection.QueryRowContext(ctx, `
+SELECT idempotency_key, account_id, operation_type, amount, resulting_balance
+FROM idempotency_operations
+WHERE idempotency_key = ?`, key).Scan(
+		&operation.Key,
+		&operation.AccountID,
+		&operationType,
+		&operation.Amount,
+		&operation.ResultingBalance,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return application.IdempotencyOperation{}, application.ErrIdempotencyNotFound
+	}
+	if err != nil {
+		return application.IdempotencyOperation{}, fmt.Errorf("buscar idempotência: %w: %v", ErrStorage, err)
+	}
+	operation.OperationType = application.OperationType(operationType)
+	return operation, nil
+}
+
+func (transaction *accountTransaction) CreateIdempotencyOperation(ctx context.Context, operation application.IdempotencyOperation) error {
+	_, err := transaction.connection.ExecContext(ctx, `
+INSERT INTO idempotency_operations (idempotency_key, account_id, operation_type, amount, resulting_balance, created_at)
+VALUES (?, ?, ?, ?, ?, ?)`,
+		operation.Key,
+		operation.AccountID,
+		operation.OperationType,
+		operation.Amount,
+		operation.ResultingBalance,
+		formatTime(time.Now()),
+	)
+	if err != nil {
+		if isIdempotencyConflictError(err) {
+			return application.ErrIdempotencyConflict
+		}
+		return fmt.Errorf("criar idempotência: %w: %v", ErrStorage, err)
+	}
+	return nil
 }
 
 type queryExecutor interface {
@@ -209,4 +259,9 @@ func parseTime(value string) (time.Time, error) {
 func isDuplicateDocumentError(err error) bool {
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "unique constraint failed: accounts.document")
+}
+
+func isIdempotencyConflictError(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unique constraint failed: idempotency_operations.idempotency_key")
 }

@@ -100,8 +100,9 @@ func (handler *Handler) Health(c echo.Context) error {
 	return c.JSON(http.StatusOK, healthResponse{Status: "ok"})
 }
 
-func (handler *Handler) moneyOperation(c echo.Context, operation func(context.Context, string, int64) (domain.Account, error)) error {
-	if err := validateIdempotencyKey(c.Request().Header.Get("Idempotency-Key")); err != nil {
+func (handler *Handler) moneyOperation(c echo.Context, operation func(context.Context, string, int64, string) (application.MoneyOperationResult, error)) error {
+	key, err := normalizeIdempotencyKey(c.Request().Header.Get("Idempotency-Key"))
+	if err != nil {
 		return writeError(c, err)
 	}
 	var request moneyOperationRequest
@@ -112,11 +113,11 @@ func (handler *Handler) moneyOperation(c echo.Context, operation func(context.Co
 		return writeError(c, newRequestError("campo amount obrigatório"))
 	}
 
-	account, err := operation(c.Request().Context(), c.Param("id"), *request.Amount)
+	account, err := operation(c.Request().Context(), c.Param("id"), *request.Amount, key)
 	if err != nil {
 		return writeError(c, err)
 	}
-	return c.JSON(http.StatusOK, balanceResponse{AccountID: account.ID, Balance: account.Balance})
+	return c.JSON(http.StatusOK, balanceResponse{AccountID: account.AccountID, Balance: account.Balance})
 }
 
 func decodeJSON(c echo.Context, destination interface{}) error {
@@ -136,10 +137,10 @@ func decodeJSON(c echo.Context, destination interface{}) error {
 	return nil
 }
 
-func validateIdempotencyKey(value string) error {
+func normalizeIdempotencyKey(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" || utf8.RuneCountInString(value) > maxIdempotencyKeyLength {
-		return newRequestError("Idempotency-Key inválido")
+		return "", newRequestError("Idempotency-Key inválido")
 	}
-	return nil
+	return value, nil
 }
