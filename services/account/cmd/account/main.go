@@ -30,7 +30,7 @@ func run() error {
 	}
 	address := os.Getenv("ACCOUNT_HTTP_ADDR")
 	if address == "" {
-		address = ":8080"
+		address = ":8088"
 	}
 
 	repository, err := sqlite.Open(ctx, databasePath)

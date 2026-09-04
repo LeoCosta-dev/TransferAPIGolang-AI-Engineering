@@ -113,11 +113,11 @@ func (handler *Handler) moneyOperation(c echo.Context, operation func(context.Co
 		return writeError(c, newRequestError("campo amount obrigatório"))
 	}
 
-	account, err := operation(c.Request().Context(), c.Param("id"), *request.Amount, key)
+	result, err := operation(c.Request().Context(), c.Param("id"), *request.Amount, key)
 	if err != nil {
 		return writeError(c, err)
 	}
-	return c.JSON(http.StatusOK, balanceResponse{AccountID: account.AccountID, Balance: account.Balance})
+	return c.JSON(http.StatusOK, balanceResponse{AccountID: result.AccountID, Balance: result.Balance})
 }
 
 func decodeJSON(c echo.Context, destination interface{}) error {
