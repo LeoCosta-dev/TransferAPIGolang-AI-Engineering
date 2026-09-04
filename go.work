@@ -1,3 +1,6 @@
 go 1.27.1
 
-use ./services/account
+use (
+	./services/account
+	./services/transactions
+)
