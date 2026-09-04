@@ -11,6 +11,12 @@ type AccountRepository interface {
 	Create(ctx context.Context, account domain.Account) error
 	FindByID(ctx context.Context, id string) (domain.Account, error)
 	Update(ctx context.Context, account domain.Account) error
+	WithTransaction(ctx context.Context, operation func(context.Context, AccountTransaction) error) error
+}
+
+type AccountTransaction interface {
+	FindByID(ctx context.Context, id string) (domain.Account, error)
+	Update(ctx context.Context, account domain.Account) error
 }
 
 type Service struct {
@@ -76,31 +82,47 @@ func (service *Service) GetBalance(ctx context.Context, id string) (int64, error
 }
 
 func (service *Service) Credit(ctx context.Context, id string, amount int64) (domain.Account, error) {
-	account, err := service.findAccount(ctx, id)
+	var result domain.Account
+	err := service.repository.WithTransaction(ctx, func(transactionContext context.Context, transaction AccountTransaction) error {
+		account, err := service.findAccountInTransaction(transactionContext, transaction, id)
+		if err != nil {
+			return err
+		}
+		if err := account.Credit(amount, time.Now().UTC()); err != nil {
+			return err
+		}
+		if err := transaction.Update(transactionContext, account); err != nil {
+			return err
+		}
+		result = account
+		return nil
+	})
 	if err != nil {
 		return domain.Account{}, err
 	}
-	if err := account.Credit(amount, time.Now().UTC()); err != nil {
-		return domain.Account{}, err
-	}
-	if err := service.repository.Update(ctx, account); err != nil {
-		return domain.Account{}, err
-	}
-	return account, nil
+	return result, nil
 }
 
 func (service *Service) Debit(ctx context.Context, id string, amount int64) (domain.Account, error) {
-	account, err := service.findAccount(ctx, id)
+	var result domain.Account
+	err := service.repository.WithTransaction(ctx, func(transactionContext context.Context, transaction AccountTransaction) error {
+		account, err := service.findAccountInTransaction(transactionContext, transaction, id)
+		if err != nil {
+			return err
+		}
+		if err := account.Debit(amount, time.Now().UTC()); err != nil {
+			return err
+		}
+		if err := transaction.Update(transactionContext, account); err != nil {
+			return err
+		}
+		result = account
+		return nil
+	})
 	if err != nil {
 		return domain.Account{}, err
 	}
-	if err := account.Debit(amount, time.Now().UTC()); err != nil {
-		return domain.Account{}, err
-	}
-	if err := service.repository.Update(ctx, account); err != nil {
-		return domain.Account{}, err
-	}
-	return account, nil
+	return result, nil
 }
 
 func (service *Service) findAccount(ctx context.Context, id string) (domain.Account, error) {
@@ -108,4 +130,11 @@ func (service *Service) findAccount(ctx context.Context, id string) (domain.Acco
 		return domain.Account{}, err
 	}
 	return service.repository.FindByID(ctx, id)
+}
+
+func (service *Service) findAccountInTransaction(ctx context.Context, transaction AccountTransaction, id string) (domain.Account, error) {
+	if err := domain.ValidateAccountID(id); err != nil {
+		return domain.Account{}, err
+	}
+	return transaction.FindByID(ctx, id)
 }

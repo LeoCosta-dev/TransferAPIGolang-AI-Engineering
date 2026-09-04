@@ -19,6 +19,10 @@ type accountRepositoryFake struct {
 	updateError error
 }
 
+func (fake *accountRepositoryFake) WithTransaction(ctx context.Context, operation func(context.Context, AccountTransaction) error) error {
+	return operation(ctx, fake)
+}
+
 func newAccountRepositoryFake(account domain.Account) *accountRepositoryFake {
 	return &accountRepositoryFake{accounts: map[string]domain.Account{account.ID: account}}
 }
