@@ -1,9 +1,13 @@
 package sqlite
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/lcosta/TransferAPIGolang/services/account/internal/application"
+)
 
 var (
-	ErrAccountNotFound   = errors.New("conta não encontrada")
-	ErrDuplicateDocument = errors.New("documento já associado a uma conta")
+	ErrAccountNotFound   = application.ErrAccountNotFound
+	ErrDuplicateDocument = application.ErrDuplicateDocument
 	ErrStorage           = errors.New("erro de persistência")
 )

@@ -14,6 +14,16 @@ type AccountRepository interface {
 	WithTransaction(ctx context.Context, operation func(context.Context, AccountTransaction) error) error
 }
 
+type AccountService interface {
+	CreateAccount(ctx context.Context, name, document string) (domain.Account, error)
+	GetAccount(ctx context.Context, id string) (domain.Account, error)
+	UpdateName(ctx context.Context, id, name string) (domain.Account, error)
+	ChangeStatus(ctx context.Context, id string, status domain.Status) (domain.Account, error)
+	GetBalance(ctx context.Context, id string) (int64, error)
+	Credit(ctx context.Context, id string, amount int64) (domain.Account, error)
+	Debit(ctx context.Context, id string, amount int64) (domain.Account, error)
+}
+
 type AccountTransaction interface {
 	FindByID(ctx context.Context, id string) (domain.Account, error)
 	Update(ctx context.Context, account domain.Account) error
@@ -22,6 +32,8 @@ type AccountTransaction interface {
 type Service struct {
 	repository AccountRepository
 }
+
+var _ AccountService = (*Service)(nil)
 
 func NewService(repository AccountRepository) *Service {
 	return &Service{repository: repository}

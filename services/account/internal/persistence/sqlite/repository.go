@@ -19,6 +19,10 @@ type Repository struct {
 	db *sql.DB
 }
 
+func (repository *Repository) Close() error {
+	return repository.db.Close()
+}
+
 func Open(ctx context.Context, dataSourceName string) (*Repository, error) {
 	db, err := sql.Open("sqlite", dataSourceName)
 	if err != nil {
