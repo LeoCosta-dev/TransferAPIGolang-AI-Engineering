@@ -309,6 +309,7 @@ func TestChangeStatusEndpointResponses(t *testing.T) {
 		{"status inválido", `{"from":"ACTIVE","status":"PAUSED"}`, nil, http.StatusBadRequest, "status inválido"},
 		{"json inválido", `{"from":`, nil, http.StatusBadRequest, "JSON inválido"},
 		{"conta inexistente", `{"from":"ACTIVE","status":"BLOCKED"}`, application.ErrAccountNotFound, http.StatusNotFound, "conta não encontrada"},
+		{"transição inválida", `{"from":"CLOSED","status":"ACTIVE"}`, domain.ErrInvalidStatusChange, http.StatusConflict, "transição de status inválida"},
 		{"erro interno", `{"from":"ACTIVE","status":"BLOCKED"}`, errors.New("falha inesperada"), http.StatusInternalServerError, "erro interno do servidor"},
 	}
 

@@ -121,7 +121,7 @@ func writeError(c echo.Context, err error) error {
 	case errors.Is(err, application.ErrAccountNotFound):
 		status = http.StatusNotFound
 		message = "conta não encontrada"
-	case errors.Is(err, application.ErrIdempotencyConflict), errors.Is(err, domain.ErrAccountBlocked), errors.Is(err, domain.ErrAccountClosed), errors.Is(err, domain.ErrInsufficientBalance):
+	case errors.Is(err, application.ErrIdempotencyConflict), errors.Is(err, domain.ErrAccountBlocked), errors.Is(err, domain.ErrAccountClosed), errors.Is(err, domain.ErrInsufficientBalance), errors.Is(err, domain.ErrInvalidStatusChange):
 		status = http.StatusConflict
 		message = err.Error()
 	}
