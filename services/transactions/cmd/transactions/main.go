@@ -34,7 +34,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer repository.Close(context.Background())
+	defer func() {
+		if err := repository.Close(context.Background()); err != nil {
+			log.Printf("erro ao fechar repositório: %v", err)
+		}
+	}()
 	e := echo.New()
 	httpapi.RegisterRoutes(e, httpapi.NewHandler(application.NewService(repository)))
 	address := os.Getenv("TRANSACTIONS_HTTP_ADDR")
