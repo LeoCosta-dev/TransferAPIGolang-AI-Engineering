@@ -120,8 +120,8 @@ jobs:
 
             cd ~/transfer-api
 
-            docker compose -f docker-compose.qa.yml pull
-            docker compose -f docker-compose.qa.yml up -d --remove-orphans
+            docker compose -p transfer-api-qa -f docker-compose.qa.yml pull
+            docker compose -p transfer-api-qa -f docker-compose.qa.yml up -d --remove-orphans
 
             sleep 5
 
@@ -234,8 +234,8 @@ jobs:
 
             cd ~/transfer-api
 
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -p transfer-api-prod -f docker-compose.prod.yml pull
+            docker compose -p transfer-api-prod -f docker-compose.prod.yml up -d --remove-orphans
 
             sleep 5
 

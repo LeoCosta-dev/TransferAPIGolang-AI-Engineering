@@ -1,3 +1,5 @@
+name: transfer-api-qa
+
 services:
   transactions:
     image: ghcr.io/leocosta-dev/transferapigolang-transactions:qa

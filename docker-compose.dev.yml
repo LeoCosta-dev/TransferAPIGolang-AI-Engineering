@@ -9,6 +9,33 @@ services:
       - mongo_data:/data/db
     ports:
       - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot initialization of the rs0 replica set, required by MongoDB
+  # multi-document transactions. Idempotent: rs.initiate only runs when the
+  # replica set has not been initialized yet (restarts keep the existing
+  # configuration in the mongo_data volume).
+  mongo-init:
+    image: mongo:7.0
+    restart: "no"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    command:
+      - mongosh
+      - --host
+      - mongo:27017
+      - --quiet
+      - --eval
+      - |
+        if (!db.adminCommand({ hello: 1 }).setName) {
+          rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongo:27017" }] })
+        }
 
   transactions:
     build:
@@ -20,7 +47,8 @@ services:
       MONGODB_DATABASE: transfer_api
       TRANSACTIONS_HTTP_ADDR: ":8089"
     depends_on:
-      - mongo
+      mongo-init:
+        condition: service_completed_successfully
     ports:
       - "8089:8089"
 
@@ -36,8 +64,10 @@ services:
       TRANSACTIONS_HTTP_ADDR: ":8089"
       TRANSACTIONS_SERVICE_URL: "http://transactions:8089"
     depends_on:
-      - mongo
-      - transactions
+      mongo-init:
+        condition: service_completed_successfully
+      transactions:
+        condition: service_started
     ports:
       - "8088:8088"
 

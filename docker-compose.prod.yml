@@ -1,3 +1,5 @@
+name: transfer-api-prod
+
 services:
   transactions:
     image: ghcr.io/leocosta-dev/transferapigolang-transactions:latest

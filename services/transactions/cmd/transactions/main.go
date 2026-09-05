@@ -41,7 +41,14 @@ func run() error {
 	if address == "" {
 		address = ":8089"
 	}
-	server := &http.Server{Addr: address, Handler: e}
+	server := &http.Server{
+		Addr:              address,
+		Handler:           e,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	errorsChannel := make(chan error, 1)
 	go func() {
 		log.Printf("Transactions Service rodando em %s", address)

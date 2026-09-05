@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lcosta/TransferAPIGolang/services/account/internal/domain"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/lcosta/TransferAPIGolang/services/account/internal/domain"
 )
 
 type HTTPFinancialGateway struct {
@@ -20,7 +22,7 @@ func NewHTTPFinancialGateway(baseURL string, client *http.Client) (*HTTPFinancia
 		return nil, fmt.Errorf("TRANSACTIONS_SERVICE_URL é obrigatório")
 	}
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 5 * time.Second}
 	}
 	return &HTTPFinancialGateway{strings.TrimRight(baseURL, "/"), client}, nil
 }
