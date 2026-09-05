@@ -166,8 +166,8 @@ jobs:
 
             cd ~/transfer-api
 
-            docker compose -p transfer-api-qa -f docker-compose.qa.yml pull
-            docker compose -p transfer-api-qa -f docker-compose.qa.yml up -d --remove-orphans
+            docker compose -p transfer-api -f docker-compose.qa.yml pull
+            docker compose -p transfer-api -f docker-compose.qa.yml up -d --remove-orphans
 
             sleep 5
 
