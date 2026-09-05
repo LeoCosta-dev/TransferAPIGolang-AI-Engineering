@@ -37,3 +37,18 @@ service:
 	go work use ./services/$(name)
 
 	@echo "Microserviço '$(name)' criado com sucesso."
+
+
+.PHONY: run-account run-transactions run
+
+run-account:
+	@go run ./services/account/cmd/account
+
+run-transactions:
+	@go run ./services/transactions/cmd/transactions
+
+run:
+	@trap 'kill 0' INT TERM EXIT; \
+	go run ./services/account/cmd/account & \
+	go run ./services/transactions/cmd/transactions & \
+	wait

@@ -50,7 +50,10 @@ func run() error {
 	}
 	server := &http.Server{Addr: address, Handler: e}
 	serverErrors := make(chan error, 1)
-	go func() { serverErrors <- server.ListenAndServe() }()
+	go func() {
+		log.Printf("Account Service rodando em %s", address)
+		serverErrors <- server.ListenAndServe()
+	}()
 	shutdownContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	select {

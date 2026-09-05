@@ -43,7 +43,10 @@ func run() error {
 	}
 	server := &http.Server{Addr: address, Handler: e}
 	errorsChannel := make(chan error, 1)
-	go func() { errorsChannel <- server.ListenAndServe() }()
+	go func() {
+		log.Printf("Transactions Service rodando em %s", address)
+		errorsChannel <- server.ListenAndServe()
+	}()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	select {
