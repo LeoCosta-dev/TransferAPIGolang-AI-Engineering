@@ -1,10 +1,30 @@
 GO_MODULE_PREFIX := github.com/lcosta/TransferAPIGolang
 GO_VERSION := 1.27.1
 
-.PHONY: service
 
-GO_MODULE_PREFIX := github.com/lcosta/TransferAPIGolang
-GO_VERSION := 1.27.1
+# ==============================================================================
+# Container runtime
+# ==============================================================================
+
+DOCKER := $(shell command -v docker 2>/dev/null)
+PODMAN := $(shell command -v podman 2>/dev/null)
+
+ifeq ($(DOCKER),)
+	ifneq ($(PODMAN),)
+		COMPOSE := podman compose
+	endif
+else
+	COMPOSE := docker compose
+endif
+
+ifndef COMPOSE
+	$(error Docker ou Podman não encontrado)
+endif
+
+
+# ==============================================================================
+# Service scaffolding
+# ==============================================================================
 
 .PHONY: service
 
@@ -39,6 +59,10 @@ service:
 	@echo "Microserviço '$(name)' criado com sucesso."
 
 
+# ==============================================================================
+# Local development
+# ==============================================================================
+
 .PHONY: run-account run-transactions run
 
 run-account:
@@ -52,3 +76,35 @@ run:
 	go run ./services/account/cmd/account & \
 	go run ./services/transactions/cmd/transactions & \
 	wait
+
+
+# ==============================================================================
+# Containers - Development
+# ==============================================================================
+
+.PHONY: docker-dev docker-dev-build docker-dev-down
+
+docker-dev:
+	$(COMPOSE) -f docker-compose.dev.yml up
+
+docker-dev-build:
+	$(COMPOSE) -f docker-compose.dev.yml up --build
+
+docker-dev-down:
+	$(COMPOSE) -f docker-compose.dev.yml down
+
+
+# ==============================================================================
+# Containers - Production
+# ==============================================================================
+
+.PHONY: docker-prod docker-prod-build docker-prod-down
+
+docker-prod:
+	$(COMPOSE) -f docker-compose.prod.yml up -d
+
+docker-prod-build:
+	$(COMPOSE) -f docker-compose.prod.yml up -d --build
+
+docker-prod-down:
+	$(COMPOSE) -f docker-compose.prod.yml down

@@ -1,0 +1,27 @@
+services:
+  transactions:
+    build:
+      context: .
+      dockerfile: services/transactions/Dockerfile
+    image: transfer-api-transactions:local
+    env_file:
+      - .env
+    environment:
+      TRANSACTIONS_HTTP_ADDR: ":8089"
+    ports:
+      - "8089:8089"
+
+  account:
+    build:
+      context: .
+      dockerfile: services/account/Dockerfile
+    image: transfer-api-account:local
+    env_file:
+      - .env
+    environment:
+      ACCOUNT_HTTP_ADDR: ":8088"
+      TRANSACTIONS_SERVICE_URL: "http://transactions:8089"
+    depends_on:
+      - transactions
+    ports:
+      - "8088:8088"

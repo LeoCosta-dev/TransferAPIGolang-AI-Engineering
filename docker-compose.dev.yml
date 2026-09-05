@@ -1,0 +1,45 @@
+services:
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_DATABASE: transfer_api
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
+  transactions:
+    build:
+      context: .
+      dockerfile: services/transactions/Dockerfile
+    image: transfer-api-transactions:local
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: transfer_api
+      TRANSACTIONS_HTTP_ADDR: ":8089"
+    depends_on:
+      - mongo
+    ports:
+      - "8089:8089"
+
+  account:
+    build:
+      context: .
+      dockerfile: services/account/Dockerfile
+    image: transfer-api-account:local
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: transfer_api
+      ACCOUNT_HTTP_ADDR: ":8088"
+      TRANSACTIONS_HTTP_ADDR: ":8089"
+      TRANSACTIONS_SERVICE_URL: "http://transactions:8089"
+    depends_on:
+      - mongo
+      - transactions
+    ports:
+      - "8088:8088"
+
+volumes:
+  mongo_data:
