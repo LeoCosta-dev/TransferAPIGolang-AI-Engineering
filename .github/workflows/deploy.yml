@@ -1,0 +1,105 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - account
+          - transactions
+
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push account
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/account/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/transferapigolang-account:latest
+            ghcr.io/${{ github.repository_owner }}/transferapigolang-account:${{ github.sha }}
+
+      - name: Build and push transactions
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/transactions/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/transferapigolang-transactions:latest
+            ghcr.io/${{ github.repository_owner }}/transferapigolang-transactions:${{ github.sha }}
+
+  deploy:
+    name: Deploy to OCI
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            set -e
+
+            cd ~/transfer-api
+
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            sleep 5
+
+            curl --fail --silent --show-error http://localhost:8088/health
+            curl --fail --silent --show-error http://localhost:8089/health
+
+            docker image prune -f
