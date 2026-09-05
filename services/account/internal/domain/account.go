@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 )
@@ -15,7 +14,6 @@ type Account struct {
 	ID        string
 	Name      string
 	Document  string
-	Balance   int64
 	Status    Status
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -41,7 +39,6 @@ func NewAccountAt(name, document string, now time.Time) (Account, error) {
 		ID:        id,
 		Name:      name,
 		Document:  document,
-		Balance:   0,
 		Status:    StatusActive,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -107,46 +104,7 @@ func (account *Account) ChangeStatus(status Status, now time.Time) error {
 	if !canTransition(account.Status, status) {
 		return ErrInvalidStatusChange
 	}
-	if status == StatusClosed && account.Balance != 0 {
-		return ErrInvalidStatusChange
-	}
-
 	account.Status = status
-	account.UpdatedAt = now.UTC()
-	return nil
-}
-
-func (account *Account) Credit(amount int64, now time.Time) error {
-	if amount <= 0 || account.Balance > math.MaxInt64-amount {
-		return ErrInvalidAmount
-	}
-	if account.Status == StatusBlocked {
-		return ErrAccountBlocked
-	}
-	if account.Status == StatusClosed {
-		return ErrAccountClosed
-	}
-
-	account.Balance += amount
-	account.UpdatedAt = now.UTC()
-	return nil
-}
-
-func (account *Account) Debit(amount int64, now time.Time) error {
-	if amount <= 0 {
-		return ErrInvalidAmount
-	}
-	if account.Status == StatusBlocked {
-		return ErrAccountBlocked
-	}
-	if account.Status == StatusClosed {
-		return ErrAccountClosed
-	}
-	if amount > account.Balance {
-		return ErrInsufficientBalance
-	}
-
-	account.Balance -= amount
 	account.UpdatedAt = now.UTC()
 	return nil
 }

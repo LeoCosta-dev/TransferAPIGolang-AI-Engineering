@@ -1,21 +1,25 @@
-#  Service — Domain
+# Transactions Service — Domain
 
 ## Domain Model
 
-Describe the entities and value objects owned by the service.
+An account financial state contains an account ID and an integer balance. A
+movement contains account ID, CREDIT or DEBIT type, amount, resulting balance
+and idempotency key.
 
 ## Invariants
 
-Describe the invariants that must always be preserved.
+Balance is never negative; amounts are integer minor units and strictly
+positive; only ACTIVE accounts move money.
 
 ## Business Operations
 
-Describe the domain operations and their rules.
+Credit adds the amount. Debit subtracts only when sufficient funds exist.
 
 ## State Transitions
 
-Describe valid state transitions, when applicable.
+Movements are immutable once persisted.
 
 ## Errors
 
-Describe domain errors and their meaning.
+Invalid amount, blocked account, closed account and insufficient balance are
+business errors.

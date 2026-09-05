@@ -10,9 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/lcosta/TransferAPIGolang/services/account/internal/application"
-	"github.com/lcosta/TransferAPIGolang/services/account/internal/persistence/sqlite"
+	"github.com/lcosta/TransferAPIGolang/services/account/internal/persistence/mongodb"
 	httpapi "github.com/lcosta/TransferAPIGolang/services/account/internal/transport/http"
 )
 
@@ -23,47 +24,44 @@ func main() {
 }
 
 func run() error {
-	ctx := context.Background()
-	databasePath := os.Getenv("ACCOUNT_DB_PATH")
-	if databasePath == "" {
-		databasePath = "account.db"
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.New("carregar arquivo de configuração local")
 	}
+	uri, database := os.Getenv("MONGODB_URI"), os.Getenv("MONGODB_DATABASE")
+	if uri == "" || database == "" {
+		return errors.New("MONGODB_URI e MONGODB_DATABASE são obrigatórios")
+	}
+	ctx := context.Background()
+	repository, err := mongodb.Open(ctx, uri, database)
+	if err != nil {
+		return err
+	}
+	defer repository.Close(context.Background())
+	financial, err := application.NewHTTPFinancialGateway(os.Getenv("TRANSACTIONS_SERVICE_URL"), nil)
+	if err != nil {
+		return err
+	}
+	service := application.NewService(repository, financial)
+	e := echo.New()
+	httpapi.RegisterRoutes(e, httpapi.NewHandler(service))
 	address := os.Getenv("ACCOUNT_HTTP_ADDR")
 	if address == "" {
 		address = ":8088"
 	}
-
-	repository, err := sqlite.Open(ctx, databasePath)
-	if err != nil {
-		return err
-	}
-	defer repository.Close()
-
-	service := application.NewService(repository)
-	e := echo.New()
-	httpapi.RegisterRoutes(e, httpapi.NewHandler(service))
 	server := &http.Server{Addr: address, Handler: e}
-
 	serverErrors := make(chan error, 1)
-	go func() {
-		serverErrors <- server.ListenAndServe()
-	}()
-
-	shutdownContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stopSignals()
-
+	go func() { serverErrors <- server.ListenAndServe() }()
+	shutdownContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 	select {
 	case err := <-serverErrors:
-		if !errors.Is(err, http.ErrServerClosed) {
-			return err
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
-		return nil
+		return err
 	case <-shutdownContext.Done():
-		shutdownDeadline, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		deadline, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := server.Shutdown(shutdownDeadline); err != nil {
-			return err
-		}
-		return nil
+		return server.Shutdown(deadline)
 	}
 }

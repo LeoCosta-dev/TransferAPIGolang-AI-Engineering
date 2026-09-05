@@ -58,7 +58,8 @@ Current services:
 
 ```text
 services/
-└── account/
+├── account/
+└── transactions/
 ```
 
 The Account Service is responsible for:
@@ -67,11 +68,12 @@ The Account Service is responsible for:
 * account retrieval;
 * account updates;
 * account status management;
-* balance management;
-* credit operations;
-* debit operations;
-* idempotency;
-* persistence.
+* account status management.
+
+The Transactions Service is responsible for balances, credits, debits,
+movement history and idempotency. Both services persist in MongoDB Atlas using
+`MONGODB_URI` and `MONGODB_DATABASE`; credentials are supplied only through
+environment variables.
 
 ## Repository Structure
 
@@ -135,7 +137,7 @@ Planned technologies include:
 
 * Go;
 * Echo;
-* SQLite;
+* MongoDB Atlas;
 * REST API;
 * Docker;
 * automated tests;
@@ -145,14 +147,12 @@ Additional technologies may be introduced when there is a clear engineering reas
 
 ## Domain
 
-The initial Account Service models:
+The services model:
 
 * customer accounts;
 * account status;
-* account balances;
-* credit operations;
-* debit operations;
-* idempotent monetary operations.
+* account lifecycle and status;
+* balances, credit operations, debit operations and idempotency in Transactions Service.
 
 Money is represented using integer minor units rather than floating-point numbers.
 
@@ -202,7 +202,7 @@ The project is currently under active development.
 * [x] Account API contract
 * [ ] Domain implementation
 * [ ] Application layer
-* [ ] SQLite persistence
+* [x] MongoDB persistence
 * [ ] HTTP transport
 * [ ] Integration
 * [ ] Automated validation
@@ -210,7 +210,11 @@ The project is currently under active development.
 
 ## Running the Project
 
-Development instructions will be added as the implementation becomes available.
+For local MongoDB Atlas development, copy `.env.example` to `.env` and fill
+only the local `MONGODB_URI`. The `.env` file is ignored by Git. Run services
+from the repository root with `go run ./services/account/cmd/account` and
+`go run ./services/transactions/cmd/transactions`. Shell, Docker and CI
+environment variables take precedence over `.env` values.
 
 The repository uses a Go workspace to coordinate its services.
 

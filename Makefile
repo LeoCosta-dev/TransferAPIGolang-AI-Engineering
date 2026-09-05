@@ -15,7 +15,7 @@ service:
 	mkdir -p services/$(name)/cmd/$(name)
 	mkdir -p services/$(name)/internal/domain
 	mkdir -p services/$(name)/internal/application
-	mkdir -p services/$(name)/internal/persistence/sqlite
+	mkdir -p services/$(name)/internal/persistence/mongodb
 	mkdir -p services/$(name)/internal/transport/http
 	mkdir -p services/$(name)/docs
 
