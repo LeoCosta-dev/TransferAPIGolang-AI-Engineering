@@ -566,6 +566,15 @@ make hooks
 
 The pipeline runs the same pinned `golangci-lint` version as a mandatory gate in the `Test` job, before any build or deployment.
 
+Known Go vulnerabilities are checked with `govulncheck` (pinned version `v1.7.0`). Install it and run it locally for both services:
+
+```bash
+make install-vulncheck
+make vulncheck
+```
+
+The pipeline runs the same pinned `govulncheck` version as a mandatory gate (failures block build and deployment).
+
 ## Validation Philosophy
 
 The project treats compilation as only one part of validation.

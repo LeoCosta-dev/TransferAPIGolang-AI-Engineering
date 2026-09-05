@@ -114,11 +114,21 @@ docker-prod-down:
 # Quality
 # ==============================================================================
 
-.PHONY: lint hooks
+.PHONY: lint hooks vulncheck install-vulncheck
 
 lint:
 	@cd services/account && golangci-lint run
 	@cd services/transactions && golangci-lint run
+
+GOVULNCHECK_VERSION := v1.7.0
+
+install-vulncheck:
+	@go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) && \
+	echo "govulncheck $(GOVULNCHECK_VERSION) instalado com sucesso."
+
+vulncheck:
+	@cd services/account && govulncheck ./...
+	@cd services/transactions && govulncheck ./...
 
 hooks:
 	@git config core.hooksPath .githooks
