@@ -1,15 +1,10 @@
+```yaml
 name: Deploy
 
 on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: "Ambiente de deploy"
-        required: true
-        default: production
-        type: choice
-        options:
-          - production
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -69,8 +64,8 @@ jobs:
           file: services/account/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/transferapigolang-account:latest
-            ghcr.io/${{ github.repository_owner }}/transferapigolang-account:${{ github.sha }}
+            ghcr.io/leocosta-dev/transferapigolang-account:latest
+            ghcr.io/leocosta-dev/transferapigolang-account:${{ github.sha }}
 
       - name: Build and push transactions
         uses: docker/build-push-action@v6
@@ -79,14 +74,14 @@ jobs:
           file: services/transactions/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/transferapigolang-transactions:latest
-            ghcr.io/${{ github.repository_owner }}/transferapigolang-transactions:${{ github.sha }}
+            ghcr.io/leocosta-dev/transferapigolang-transactions:latest
+            ghcr.io/leocosta-dev/transferapigolang-transactions:${{ github.sha }}
 
   deploy:
     name: Deploy to OCI
     runs-on: ubuntu-latest
     needs: build-and-push
-    environment: ${{ inputs.environment }}
+    environment: production
 
     steps:
       - name: Deploy
@@ -109,3 +104,4 @@ jobs:
             curl --fail --silent --show-error http://localhost:8089/health
 
             docker image prune -f
+```
