@@ -1,21 +1,16 @@
 services:
   transactions:
-    build:
-      context: .
-      dockerfile: services/transactions/Dockerfile
-    image: transfer-api-transactions:local
+    image: ghcr.io/leocosta-dev/transferapigolang-transactions:latest
     env_file:
       - .env
     environment:
       TRANSACTIONS_HTTP_ADDR: ":8089"
     ports:
       - "127.0.0.1:8089:8089"
+    restart: unless-stopped
 
   account:
-    build:
-      context: .
-      dockerfile: services/account/Dockerfile
-    image: transfer-api-account:local
+    image: ghcr.io/leocosta-dev/transferapigolang-account:latest
     env_file:
       - .env
     environment:
@@ -25,3 +20,4 @@ services:
       - transactions
     ports:
       - "127.0.0.1:8088:8088"
+    restart: unless-stopped
