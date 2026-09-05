@@ -108,3 +108,18 @@ docker-prod-build:
 
 docker-prod-down:
 	$(COMPOSE) -f docker-compose.prod.yml down
+
+
+# ==============================================================================
+# Quality
+# ==============================================================================
+
+.PHONY: lint hooks
+
+lint:
+	@cd services/account && golangci-lint run
+	@cd services/transactions && golangci-lint run
+
+hooks:
+	@git config core.hooksPath .githooks
+	@echo "Pre-commit hooks ativados (.githooks/pre-commit)."

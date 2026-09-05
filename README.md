@@ -548,6 +548,24 @@ Local configuration should be provided through environment variables or a local 
 
 The `.env` file is ignored by Git and must never contain values committed to the repository.
 
+## Code Quality
+
+Static analysis is enforced with `golangci-lint` v2 (fixed version `v2.13.2`, configuration in [`.golangci.yml`](.golangci.yml)), alongside `gofmt`, `go vet`, `go test` and `go test -race`.
+
+Run the linter locally for both services:
+
+```bash
+make lint
+```
+
+A Git pre-commit hook runs the `gofmt` check, `golangci-lint` and `go test ./...` for both services before every commit (`go test -race` is reserved for CI to keep the hook fast). Activate it once per clone with:
+
+```bash
+make hooks
+```
+
+The pipeline runs the same pinned `golangci-lint` version as a mandatory gate in the `Test` job, before any build or deployment.
+
 ## Validation Philosophy
 
 The project treats compilation as only one part of validation.
