@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -49,7 +50,11 @@ func (g *HTTPFinancialGateway) send(ctx context.Context, path string, status dom
 	if err != nil {
 		return fmt.Errorf("sincronizar estado financeiro: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			log.Printf("erro ao fechar corpo da resposta: %v", err)
+		}
+	}()
 	if res.StatusCode == http.StatusConflict {
 		return ErrAccountHasBalance
 	}
@@ -68,7 +73,11 @@ func (g *HTTPFinancialGateway) request(ctx context.Context, path string, body []
 	if err != nil {
 		return fmt.Errorf("sincronizar estado financeiro: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			log.Printf("erro ao fechar corpo da resposta: %v", err)
+		}
+	}()
 	if res.StatusCode == http.StatusConflict {
 		return ErrAccountHasBalance
 	}

@@ -36,7 +36,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer repository.Close(context.Background())
+	defer func() {
+		if err := repository.Close(context.Background()); err != nil {
+			log.Printf("erro ao fechar repositório: %v", err)
+		}
+	}()
 	financial, err := application.NewHTTPFinancialGateway(os.Getenv("TRANSACTIONS_SERVICE_URL"), nil)
 	if err != nil {
 		return err
