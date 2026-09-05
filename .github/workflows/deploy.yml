@@ -6,6 +6,7 @@ on:
       - main
     tags:
       - 'v*.*.*'
+      - 'v-qa*.*.*'
 
 permissions:
   contents: read
@@ -42,9 +43,17 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-  build-and-push:
-    name: Build and Push Images
+  # ============================================================
+  # QA
+  # Trigger: v-qaX.Y.Z
+  # Can be created from ANY branch
+  # Example: v-qa0.0.1
+  # ============================================================
+
+  build-and-push-qa:
+    name: Build and Push QA Images
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v-qa')
     needs: test
 
     steps:
@@ -58,31 +67,145 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push account
+      - name: Build and push account QA
         uses: docker/build-push-action@v6
         with:
           context: .
           file: services/account/Dockerfile
           push: true
           tags: |
-            ghcr.io/leocosta-dev/transferapigolang-account:latest
-            ghcr.io/leocosta-dev/transferapigolang-account:${{ github.sha }}
+            ghcr.io/leocosta-dev/transferapigolang-account:qa
+            ghcr.io/leocosta-dev/transferapigolang-account:${{ github.ref_name }}
 
-      - name: Build and push transactions
+      - name: Build and push transactions QA
         uses: docker/build-push-action@v6
         with:
           context: .
           file: services/transactions/Dockerfile
           push: true
           tags: |
-            ghcr.io/leocosta-dev/transferapigolang-transactions:latest
-            ghcr.io/leocosta-dev/transferapigolang-transactions:${{ github.sha }}
+            ghcr.io/leocosta-dev/transferapigolang-transactions:qa
+            ghcr.io/leocosta-dev/transferapigolang-transactions:${{ github.ref_name }}
 
-  deploy:
-    name: Deploy to OCI
+  deploy-qa:
+    name: Deploy QA
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-and-push
+    if: startsWith(github.ref, 'refs/tags/v-qa')
+    needs: build-and-push-qa
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload QA compose
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          passphrase: ${{ secrets.OCI_SSH_PASSPHRASE }}
+          source: "docker-compose.qa.yml"
+          target: "~/transfer-api"
+
+      - name: Deploy QA
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          passphrase: ${{ secrets.OCI_SSH_PASSPHRASE }}
+          script: |
+            set -e
+
+            cd ~/transfer-api
+
+            docker compose -f docker-compose.qa.yml pull
+            docker compose -f docker-compose.qa.yml up -d --remove-orphans
+
+            sleep 5
+
+            curl --fail --silent --show-error http://localhost:9088/health
+            curl --fail --silent --show-error http://localhost:9089/health
+
+            docker image prune -f
+
+  # ============================================================
+  # PRODUCTION
+  # Trigger: vX.Y.Z
+  # MUST point to a commit in main
+  # Example: v0.0.1
+  # ============================================================
+
+  verify-production-source:
+    name: Verify Production Source
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/v-qa')
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag belongs to main
+        run: |
+          set -e
+
+          git fetch origin main
+
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "ERROR: Production tags must point to a commit in main."
+            echo "Tag: $GITHUB_REF_NAME"
+            echo "Commit: $GITHUB_SHA"
+            exit 1
+          fi
+
+          echo "Production tag is based on main."
+
+  build-and-push-production:
+    name: Build and Push Production Images
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/v-qa')
+    needs: verify-production-source
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push account Production
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/account/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/leocosta-dev/transferapigolang-account:${{ github.ref_name }}
+            ghcr.io/leocosta-dev/transferapigolang-account:latest
+
+      - name: Build and push transactions Production
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/transactions/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/leocosta-dev/transferapigolang-transactions:${{ github.ref_name }}
+            ghcr.io/leocosta-dev/transferapigolang-transactions:latest
+
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/v-qa')
+    needs: build-and-push-production
     environment: production
 
     steps:
@@ -99,7 +222,7 @@ jobs:
           source: "docker-compose.prod.yml"
           target: "~/transfer-api"
 
-      - name: Deploy
+      - name: Deploy Production
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.OCI_HOST }}
