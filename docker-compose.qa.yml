@@ -1,0 +1,25 @@
+services:
+  transactions:
+    image: ghcr.io/leocosta-dev/transferapigolang-transactions:qa
+    env_file:
+      - .env
+    environment:
+      TRANSACTIONS_HTTP_ADDR: ":9089"
+      MONGODB_DATABASE: "transfer_api_qa"
+    ports:
+      - "127.0.0.1:9089:9089"
+    restart: unless-stopped
+
+  account:
+    image: ghcr.io/leocosta-dev/transferapigolang-account:qa
+    env_file:
+      - .env
+    environment:
+      ACCOUNT_HTTP_ADDR: ":9088"
+      TRANSACTIONS_SERVICE_URL: "http://transactions:9089"
+      MONGODB_DATABASE: "transfer_api_qa"
+    depends_on:
+      - transactions
+    ports:
+      - "127.0.0.1:9088:9088"
+    restart: unless-stopped
