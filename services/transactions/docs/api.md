@@ -10,10 +10,10 @@ Balances and monetary movements for account IDs.
 
 ## Endpoints
 
-`GET /api/v1/accounts/{id}/balance` returns the current balance.
+`GET /api/v1/transactions/{id}/balance` returns the current balance.
 
-`POST /api/v1/accounts/{id}/credits` and
-`POST /api/v1/accounts/{id}/debits` accept `{ "amount": 100 }` plus a required
+`POST /api/v1/transactions/{id}/credits` and
+`POST /api/v1/transactions/{id}/debits` accept `{ "amount": 100 }` plus a required
 `Idempotency-Key` header. They return the account ID, operation type, amount
 and resulting integer balance.
 
