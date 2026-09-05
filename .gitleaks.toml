@@ -1,0 +1,7 @@
+# Configuração mínima do Gitleaks.
+# Usa as regras padrão da ferramenta via [extend] — nada é duplicado aqui.
+# Nenhuma allowlist é adicionada preventivamente.
+title = "TransferAPIGolang gitleaks config"
+
+[extend]
+useDefault = true

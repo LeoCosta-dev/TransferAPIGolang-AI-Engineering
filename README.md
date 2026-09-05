@@ -575,6 +575,15 @@ make vulncheck
 
 The pipeline runs the same pinned `govulncheck` version as a mandatory gate (failures block build and deployment).
 
+Secrets accidentally committed to Git are detected with `gitleaks` (pinned version `v8.30.1`, minimal config in [`.gitleaks.toml`](.gitleaks.toml) that uses the tool's default rules). Install it and scan the repository locally:
+
+```bash
+make install-gitleaks
+make secret-scan
+```
+
+The local scan (`gitleaks git`) checks the full commit history plus the working tree, so a secret that was committed in the past is detected as well. The pipeline runs the same pinned version as a mandatory gate before any deploy: a detected secret fails the workflow (`--exit-code=1`).
+
 ## Validation Philosophy
 
 The project treats compilation as only one part of validation.

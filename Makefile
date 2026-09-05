@@ -114,7 +114,7 @@ docker-prod-down:
 # Quality
 # ==============================================================================
 
-.PHONY: lint hooks vulncheck install-vulncheck
+.PHONY: lint hooks vulncheck install-vulncheck secret-scan install-gitleaks
 
 lint:
 	@cd services/account && golangci-lint run
@@ -129,6 +129,15 @@ install-vulncheck:
 vulncheck:
 	@cd services/account && govulncheck ./...
 	@cd services/transactions && govulncheck ./...
+
+GITLEAKS_VERSION := v8.30.1
+
+install-gitleaks:
+	@go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION) && \
+	echo "gitleaks $(GITLEAKS_VERSION) instalado com sucesso."
+
+secret-scan:
+	@gitleaks git --exit-code=1 --redact
 
 hooks:
 	@git config core.hooksPath .githooks
